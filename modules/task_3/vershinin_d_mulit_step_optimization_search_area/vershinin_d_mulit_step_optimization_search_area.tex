@@ -1,0 +1,864 @@
+\documentclass{report}
+
+\usepackage[warn]{mathtext}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{luainputenc}
+\usepackage[english, russian]{babel}
+\usepackage[pdftex]{hyperref}
+\usepackage{tempora}
+\usepackage[12pt]{extsizes}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{amsmath}
+
+\geometry{a4paper,top=2cm,bottom=2cm,left=2.5cm,right=1.5cm}
+\setlength{\parskip}{0.5cm}
+\setlist{nolistsep, itemsep=0.3cm,parsep=0pt}
+
+\usepackage{listings}
+\lstset{language=C++,
+        basicstyle=\footnotesize,
+        keywordstyle=\color{blue}\ttfamily,
+        stringstyle=\color{red}\ttfamily,
+        commentstyle=\color{green}\ttfamily,
+        morecomment=[l][\color{red}]{\#}, 
+        tabsize=4,
+        breaklines=true,
+        breakatwhitespace=true,
+        title=\lstname,       
+}
+
+\makeatletter
+\renewcommand\@biblabel[1]{#1.\hfil}
+\makeatother
+
+\begin{document}
+
+\begin{titlepage}
+
+\begin{center}
+Министерство науки и высшего образования Российской Федерации
+\end{center}
+
+\begin{center}
+Федеральное государственное автономное образовательное учреждение высшего образования \\
+Национальный исследовательский Нижегородский государственный университет им. Н.И. Лобачевского
+\end{center}
+
+\begin{center}
+Институт информационных технологий, математики и механики
+\end{center}
+
+\vspace{4em}
+
+\begin{center}
+\textbf{\LargeОтчет по лабораторной работе № 3} \\
+\end{center}
+\begin{center}
+\textbf{\Large«Многошаговая схема решения двумерных задач глобальной оптимизации. 
+	Распараллеливание путем разделения области поиска.»} \\
+\end{center}
+
+\vspace{4em}
+
+\newbox{\lbox}
+\savebox{\lbox}{\hbox{text}}
+\newlength{\maxl}
+\setlength{\maxl}{\wd\lbox}
+\hfill\parbox{7cm}{
+\hspace*{5cm}\hspace*{-5cm}\textbf{Выполнил:} \\ студент группы 381906-2 \\ Вершинин Даниил\\
+\\
+\hspace*{5cm}\hspace*{-5cm}\textbf{Преподаватель:}\\ доцент кафедры МОСТ, \\ кандидат технических наук \\ Сысоев А. В.\\
+}
+\vspace{\fill}
+
+\begin{center} Нижний Новгород \\ 2021 \end{center}
+
+\end{titlepage}
+
+\setcounter{page}{2}
+
+% Содержание
+\tableofcontents
+\newpage
+
+% Введение
+\section*{Введение}
+\addcontentsline{toc}{section}{Введение}
+\par Глобальная оптимизация — это раздел вычислительной математики, который занимается проблемами поиска глобального экстремума функции. Задача поиска глобального экстремума функции является одной из актуальных в современной науке и технике. Большинство практических задач, возникающих в различных сферах человеческой деятельности, могут быть сведены к задачам оптимизации.
+\par Широко известный и активно используемый подход обобщения методов одномерной оптимизации для решения многомерных оптимизационных задач состоит в применении многошаговой схемы редукции размерности, согласно которой решение многомерной задачи оптимизации может быть получено посредством решения последовательности «вложенных» одномерных задач.
+
+\newpage
+
+% Постановка задачи
+\section*{Постановка задачи}
+\addcontentsline{toc}{section}{Постановка задачи}
+\par В данном лабораторной работе требуется реализовать последовательный и параллельный алгоритмы многошаговой схемы решения двумерных задач глобальной оптимизации с распараллеливанием путем разделения области поиска, провести вычислительный эксперименты для сравнения времени работы алгоритмов. Также требуется провести тестирование работоспособности алгоритма при помощи Google Tests, сделать выводы об эффективности реализованных алгоритмов.
+\par Параллельный алгоритм должен быть реализован при помощи технологии MPI.
+
+\newpage
+
+% Описание алоритма
+\section*{Описание алгоритма}
+\addcontentsline{toc}{section}{Описание алгоритма}
+Пусть задана функция $\varphi(x, y)$. Использование многошаговой схемы редукции размерности сводит задачу поиска минимума к серии одномерных задач:
+$$\min\limits_{y^* \in D}\varphi(y^*) = \min\limits_{y \in [a_1; b_1]} \min\limits_{x \in [a_2; b_2]}\varphi(x, y)$$
+Рассмотрим задачу минимизации одномерной функции $\varphi(x)$ по переменной $x$ на интервале $[a, b]$. Для решения данной задачи воспользуемся методом Стронгина. Предположим, что выполнено $n>1$ итераций метода (в качестве точек для первой итерации можно взять случайные или граничные точки). Тогда новая точка будет получатся по следующему алгоритму:
+\par 1. Перенумеровать точки $x_1, x_2, \ldots, x_k$ так, что
+$$ a = x_1 < x_2 \ldots < x_k = b$$
+\par 2. Полагая $z_i = \varphi(x_i)$ вычислить величины $\mu$ и $M$, где $M$ является оценкой константы Липшица, а $r>1$ является заданным параметром надежности:
+$$\mu = \max\limits_{1 \leq i \leq k} \frac{|z_i - z_{i-1}|}{x_i - x_{i-1}}, M = \begin{cases} r\mu, & \mu > 0 \\ 1, & \mu=0 \end{cases} $$
+\par 3. Для каждого интервала $(x_{i-1}, x_i), 1 \leq i \leq k$ вычислить характеристику $R(i)$, которая является величиной, оценивающей вероятность нахождения глобального минимума на этом интервале:
+$$ R(1) = 2(x_1 - x_0) - 4 \frac{z_1}{M}$$
+$$ R(i) = M(x_i - x_{i-1}) + \frac{(z_i - z_{i-1})^2}{x_i - x_{i-1}} - 2(z_i - z_{i-1})$$
+$$ R(k) = 2(x_k - x_{k-1}) - 4 \frac{z_k}{M}$$
+\par 4. Определить интервал $(x_{t-1}; x_t)$, которому соответствует максимальная характеристика $R(t) = \max \{R(i), 1 \leq i \leq k \}$
+\par 5. Провести новое испытания в точке $x_{k+1}$, вычисленной по формуле:
+$$ x_{k+1} = \frac{x_t + x_{t - 1}}{2} - \frac{z_t - z_{t - 1}}{2M}$$
+\par Алгоритм останавливается, если для номера $t$ выполняется условие $x_t - x_{t_1 - 1} \leq \varepsilon$, где $\varepsilon>0$ есть заданная точность. В качестве оценки глобально-оптимального решения задачи выбираются значения:
+$$\varphi_{min} = \min\limits_{1 \leq i \leq k}\varphi(x_i), x_{min} = \arg{\min\limits_{1 \leq i \leq k}\varphi(x_i)}$$
+\par Для получения минимального значения по двум переменным, данный алгоритм запускается для $x$. После вычисления очередной точки $x_i$ по этому же алгоритму решается вложенная задача минимизации по всему интервалу $y$  при постоянном $x_i$. Затем выполнение алгоритма по переменной $x$ продолжается.
+
+\newpage
+
+% Описание схемы распараллеливания
+\section*{Описание схемы распараллеливания}
+\addcontentsline{toc}{section}{Описание схемы распараллеливания}
+\par Распараллеливание алгоритма осуществляется следующим образом: область поиска переменной $x$ распределяется на равные части между всеми процессами. После, значения полученные на каждом процессе решения собираются на процессе с рангом 0.
+\par Результат формируется на процессе с рангом 0 по следующему правилу: среди всех результатов, полученных от процессов находим $\min \{\varphi(x_i,y_i), 0 \leq i \leq p\}$, где $p$ - количество процессов. Найденные значения $x,y,\varphi(x,y)$ и будут нашим результатом для данной задачи.
+
+\newpage
+
+% Описание программной реализации
+\section*{Описание программной реализации}
+\addcontentsline{toc}{section}{Описание программной реализации}
+Программа состоит из заголовочного файла mulit\_step\_optimization\_search\_area.h и двух файлов исходного кода mulit\_step\_optimization\_search\_area.cpp и main.cpp.
+\par В заголовочном файле находятся объявления функций и вспомогательных структур.
+\par Структура для хранения точек:
+\begin{lstlisting}
+struct Point2d {
+  double x, y;
+  Point2d(double x , double y) : x(x), y(y) {}
+  Point2d() : x(0), y(0) {}
+};
+struct Point3d {
+  double x, y, z;
+  Point3d(double x, double y, double z) : x(x), y(y), z(z) {}
+  Point3d() : x(0), y(0), z(0) {}
+};
+\end{lstlisting}
+
+\par Функция для решения одномерной задачи на итервале. Задается интервал по $y$, значение $x$, функция для которой необходимо провести расчеты, максимальное количество шагов итерации, параметр надежности $r$, точность $\varepsilon$:
+\begin{lstlisting}
+Point3d calcNewY(double start_y, double finish_y, double new_x,
+				 double (*F)(double x, double y), int max_step_count,
+				 double r = 2, double eps = 0.0001);
+\end{lstlisting}
+
+\par Функция для последовательного решения задачи. Задаются интервалы по $x$ и $y$, функция для которой необходимо провести расчеты, максимальное количество шагов итерации, параметр надежности $r$, точность $\varepsilon$:
+\begin{lstlisting}
+Point3d getSequentialOperations(double start_x, double finish_x, double start_y,
+								double finish_y,
+								double (*F)(double x, double y),
+								int max_step_count = 300, double r = 2,
+								double eps = 0.0001);
+\end{lstlisting}
+
+\par Функция парралельного решения задачи. Задаются интервалы по $x$ и $y$, функция для которой необходимо провести расчеты, максимальное количество шагов итерации, параметр надежности $r$, точность $\varepsilon$:
+\begin{lstlisting}
+Point3d getParallelOperations(double start_x, double finish_x, double start_y,
+							  double finish_y, double (*F)(double x, double y),
+  							  int max_step_count = 300, double r = 2,
+							  double eps = 0.0001);
+\end{lstlisting}
+
+\par Вспомогательные функции для вычисления оценки константы Липшица:
+\begin{lstlisting} 
+double calcM(const std::vector<Point2d> &elems, double r);
+double calcM(const std::vector<Point3d> &elems, double r);
+\end{lstlisting}
+\par Вспомогательные функции для вычисления номер интервала с $\max$ характеристикой:
+\begin{lstlisting}
+int calcNumMaxR(const std::vector<Point2d> &elems, double M);
+int calcNumMaxR(const std::vector<Point3d> &elems, double M);
+\end{lstlisting}
+\par Функции, передаваемы в качестве аргумента функции сортировки:
+\begin{lstlisting}
+bool sortPoint2d_x(const Point2d &left, const Point2d &right);
+bool sortPoint3d_x(const Point3d &left, const Point3d &right);
+\end{lstlisting}
+
+\par В файле исходного кода optimization\_params.cpp содержится реализация функций,
+объявленных в заголовочном файле.
+\par В файле исходного кода main.cpp содержатся тесты для проверки корректности программы и тестовые функции для оптимизации.
+
+\newpage
+
+% Подтверждение корректности
+\section*{Подтверждение корректности}
+\addcontentsline{toc}{section}{Подтверждение корректности}
+\par Для подтверждения корректности работы данной программы с помощью  Google Tests было разработано 12 тестов. В первых 8-ми тестах для функций F1-F4 решается задача с помощью последовательного и параллельного метода. Затем результаты вычислений сравниваются с ранее известными результатами.
+\par В последних 4-х тестах результаты, полученные параллельным методом, сравниваются с результатми, полученными последовательными методами. Так же сравнивается скорость работы последовательного и параллельного метода.
+\par Программа была протестирована на 4 различных функциях и 6 вариантах количества процессов. Все тесты были пройдены успешно, что подтверждает корректность работы программы.
+
+\newpage
+
+% Результатов экспериментов
+\section*{Результаты экспериментов }
+\addcontentsline{toc}{section}{Результаты экспериментов}
+Вычислительные эксперименты для оценки эффективности работы параллельного алгоритма проводились на ПК со следующими характеристиками:
+\begin{itemize}
+	\item Процессор: Intel(R) Core(TM) i5-6400, количество ядер: 4;
+	\item Оперативная память: 8 ГБ;
+	\item Операционная система: Windows 10;
+\end{itemize}
+Эксперименты проводились для:
+\begin{enumerate} 
+	\item Функции сферы: $\varphi(x,y) = x^2 + y^2$
+	\begin{itemize}
+		\item Глобальный минимум: $\varphi(0,0) = 0$
+		\item Область поиска: $-1 \leq x,y \leq 1$
+	\end{itemize}
+	\item Функции Била: $\varphi(x,y) = (1.5 - x + xy)^2 + (2.25 - x + xy^2)^2 + (2.625 - x + xy^3)^2$
+	\begin{itemize}
+		\item Глобальный минимум: $\varphi(3,0.5) = 0$
+		\item Область поиска: $-4.5 \leq x,y \leq 4.5$
+	\end{itemize}
+	\item Функции Бута: $\varphi(x,y) = (x + 2y - 7)^2 + (2x + y - 5)^2$
+	\begin{itemize}
+		\item Глобальный минимум: $\varphi(1,3) = 0$
+		\item Область поиска: $-10 \leq x,y \leq 10$
+	\end{itemize}
+	\item Функции Матьяса: $\varphi(x,y) = 0.26(x^2 + y^2) - 0.48xy$
+	\begin{itemize}
+		\item Глобальный минимум: $\varphi(0,0) = 0$
+		\item Область поиска: $-10 \leq x,y \leq 10$
+	\end{itemize}
+\end{enumerate}
+\newpage
+\par Для каждой функции был написан тест на заданных интервалах по $x$ и $y$. Номер теста соответствует номеру функции.
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов для тестов на 4 процессах.}
+\centering
+\begin{tabular}{| p{2cm} | p{3cm} | p{4cm} | p{2cm} |}
+\hline
+Тест & Время работы последовательного алгоритма (в секундах) & Время работы параллельного алгоритма (в секундах) & Ускорение  \\[5pt]
+\hline
+1        & 5.672248       & 2.652960      & 2.138083       \\
+2        & 5.613310       & 0.315005      & 17.819746       \\
+3        & 5.720479       & 0.298007      & 19.195804       \\
+4        & 5.589398       & 0.312501      & 17.886020       \\
+
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов на для тестов на 8 процессах. }
+\centering
+\begin{tabular}{| p{2cm} | p{3cm} | p{4cm} | p{2cm} |}
+\hline
+Тест & Время работы последовательного алгоритма (в секундах) & Время работы параллельного алгоритма (в секундах) & Ускорение  \\[5pt]
+\hline
+1        & 5.762611       & 3.040476      & 1.895299       \\
+2        & 5.611316       & 0.260923      & 21.505645       \\
+3        & 5.557086       & 0.219749      & 25.288306       \\
+4        & 5.529625       & 0.261097      & 21.178460       \\
+\hline
+\end{tabular}
+\end{table}
+
+\clearpage
+
+% Выводы из результатов экспериментов
+\section*{Выводы из результатов экспериментов }
+\addcontentsline{toc}{section}{Выводы из результатов экспериментов}
+Исходя из результатов проведенных тестов можно сделать вывод, что параллельный вариант алгоритма работает значительно быстрее последовательного. Так же можно заметить, что при увеличение числа процессов повышается скорость выполнения программы. Это можно обьяснить уменьшением области поиска для переменной $x$.
+
+\newpage
+
+\section*{Заключение}
+\addcontentsline{toc}{section}{Заключение}
+Таким образом, в рамках данной лабораторной работы были разработаны последовательный и параллельный алгоритмы для решения двумерной задачи глобальной оптимизации с распараллеливанием путем разделением области поиска. Проведенные тесты показали корректность реализованной программы, а проведенные эксперименты доказали эффективность параллельного алгоритма по сравнению с последовательным.
+\newpage
+
+
+\section*{Литература}
+\addcontentsline{toc}{section}{Литература}
+\begin{enumerate}
+\item В.П. Гергель,  Многомерная многоэкстремальная оптимизация на основе адаптивной многошаговой редукции размерности /  В.П. Гергель,  В.А. Гришагин. – Нижний Новгород : Вестник Нижегородского университета им. Н.И. Лобачевского, 2010. – 170 с.
+\item К.А.Баркалов, В.П.Гергель, И.Г.Лебедев, А.В.Сысоев, Решение задач глобальной оптимизации на гетерогенных кластерных системах /  К.А.Баркалов, В.П.Гергель, И.Г.Лебедев, А.В.Сысоев – Нижний Новгород : Суперкомпьютерные дни в России, 2015. – 10 с.
+\item К.А. Баркалов, Глобальная оптимизация для математических моделей сложных задач проектирования /  К.А. Баркалов,  Р.Г. Стронгин. – Нижний Новгород : Нижегородский государственный университет им. Н.И. Лобачевского. – 56 с.
+\end{enumerate} 
+\newpage
+
+
+\section*{Приложение}
+\addcontentsline{toc}{section}{Приложение}
+mulit\_step\_optimization\_search\_area.h
+\begin{lstlisting}
+// Copyright 2021 Vershinin Daniil
+#ifndef MODULES_TASK_3_VERSHININ_D_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_H_
+#define MODULES_TASK_3_VERSHININ_D_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_H_
+
+#include <algorithm>
+#include <vector>
+
+struct Point2d {
+  double x, y;
+  Point2d(double x, double y) : x(x), y(y) {}
+  Point2d() : x(0), y(0) {}
+};
+struct Point3d {
+  double x, y, z;
+  Point3d(double x, double y, double z) : x(x), y(y), z(z) {}
+  Point3d() : x(0), y(0), z(0) {}
+};
+
+Point3d getSequentialOperations(double start_x, double finish_x, double start_y,
+                                double finish_y,
+                                double (*F)(double x, double y),
+                                int max_step_count = 300, double r = 2,
+                                double eps = 0.0001);
+
+Point3d calcNewY(double start_y, double finish_y, double new_x,
+                 double (*F)(double x, double y), int max_step_count,
+                 double r = 2, double eps = 0.0001);
+
+Point3d getParallelOperations(double start_x, double finish_x, double start_y,
+                              double finish_y, double (*F)(double x, double y),
+                              int max_step_count = 300, double r = 2,
+                              double eps = 0.0001);
+
+double calcM(const std::vector<Point2d> &elems, double r);
+double calcM(const std::vector<Point3d> &elems, double r);
+int calcNumMaxR(const std::vector<Point2d> &elems, double M);
+int calcNumMaxR(const std::vector<Point3d> &elems, double M);
+
+bool sortPoint2d_x(const Point2d &left, const Point2d &right);
+bool sortPoint3d_x(const Point3d &left, const Point3d &right);
+
+#endif  // MODULES_TASK_3_VERSHININ_D_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_MULIT_STEP_OPTIMIZATION_SEARCH_AREA_H_
+\end{lstlisting}
+\newpage
+mulit\_step\_optimization\_search\_area.cpp
+\begin{lstlisting}
+// Copyright 2021 Vershinin Daniil
+#include "../../../modules/task_3/vershinin_d_mulit_step_optimization_search_area/mulit_step_optimization_search_area.h"
+
+#include <mpi.h>
+
+#include <vector>
+
+Point3d getSequentialOperations(double start_x, double finish_x, double start_y,
+                                double finish_y,
+                                double (*F)(double x, double y),
+                                int max_step_count, double r, double eps) {
+  std::vector<Point3d> elems;
+  Point3d res = calcNewY(start_y, finish_y, start_x, F, max_step_count, r, eps);
+  if (r <= 1) {
+    return res;
+  }
+  elems.push_back(res);
+  Point3d new_res =
+      calcNewY(start_y, finish_y, finish_x, F, max_step_count, r, eps);
+  elems.push_back(new_res);
+
+  if (new_res.z < res.z) {
+    res = new_res;
+  }
+
+  int step_count = 2;
+  bool continueCalc = true;
+
+  while (step_count < max_step_count && continueCalc) {
+    double M = calcM(elems, r);
+
+    int j = calcNumMaxR(elems, M);
+
+    double new_x = (elems[j].x + elems[j - 1].x) / 2 -
+                   (elems[j].z - elems[j - 1].z) / (2 * M);
+
+    Point3d new_res =
+        calcNewY(start_y, finish_y, new_x, F, max_step_count, r, eps);
+
+    if (new_res.z < res.z) {
+      res = new_res;
+    }
+
+    if (elems[j].x - elems[j - 1].x <= eps) {
+      continueCalc = false;
+    }
+
+    elems.push_back(new_res);
+    std::sort(elems.begin(), elems.end(), sortPoint3d_x);
+
+    step_count++;
+    // if (step_count % 10 == 0) {
+    //  printf("step_count: %d, x: %lf, y: %lf, z: %lf, new_x: %lf \n",
+    //         step_count, res.x, res.y, res.z, new_x);
+    //  fflush(stdout);
+    // }
+  }
+
+  return res;
+}
+
+Point3d calcNewY(double start_y, double finish_y, double new_x,
+                 double (*F)(double x, double y), int max_step_count, double r,
+                 double eps) {
+  std::vector<Point2d> elems;
+
+  Point3d res = {new_x, 0, 0};
+  if (r <= 1) {
+    return res;
+  }
+
+  double F_res = F(new_x, start_y);
+  elems.push_back(Point2d(start_y, F_res));
+  res.y = start_y;
+  res.z = F_res;
+
+  double F_new_res = F(new_x, finish_y);
+  elems.push_back(Point2d(finish_y, F_new_res));
+
+  if (F_new_res < F_res) {
+    res.y = finish_y;
+    res.z = F_new_res;
+  }
+
+  int step_count = 2;
+  bool continueCalc = true;
+
+  while (step_count < max_step_count && continueCalc) {
+    double M = calcM(elems, r);
+
+    int j = calcNumMaxR(elems, M);
+
+    double new_y = (elems[j].x + elems[j - 1].x) / 2 -
+                   (elems[j].y - elems[j - 1].y) / (2 * M);
+
+    F_new_res = F(new_x, new_y);
+
+    if (F_new_res < res.z) {
+      res.y = new_y;
+      res.z = F_new_res;
+    }
+
+    if (elems[j].x - elems[j - 1].x <= eps) {
+      continueCalc = false;
+    }
+
+    elems.push_back(Point2d(new_y, F_new_res));
+
+    std::sort(elems.begin(), elems.end(), sortPoint2d_x);
+
+    step_count++;
+  }
+
+  return res;
+}
+
+Point3d getParallelOperations(double start_x, double finish_x, double start_y,
+                              double finish_y, double (*F)(double x, double y),
+                              int max_step_count, double r, double eps) {
+  int size, rank;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  Point3d res;
+  if (r <= 1) {
+    return res;
+  }
+  double step_x = (finish_x - start_x) / size;
+
+  std::vector<Point3d> res_list(size);
+
+  double local_start_x = start_x + step_x * rank;
+  double local_finish_x = local_start_x + step_x;
+
+  Point3d local_res =
+      getSequentialOperations(local_start_x, local_finish_x, start_y, finish_y,
+                              F, max_step_count, r, eps);
+
+  MPI_Aint offsets[] = {(MPI_Aint)offsetof(struct Point3d, x),
+                        (MPI_Aint)offsetof(struct Point3d, y),
+                        (MPI_Aint)offsetof(struct Point3d, z)};
+  MPI_Datatype types[] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE};
+  int blockcounts[] = {1, 1, 1};
+
+  MPI_Datatype MPI_Point3d;
+  MPI_Type_create_struct(3, blockcounts, offsets, types, &MPI_Point3d);
+  MPI_Type_commit(&MPI_Point3d);
+  MPI_Gather(&local_res, 1, MPI_Point3d, res_list.data(), 1, MPI_Point3d, 0,
+             MPI_COMM_WORLD);
+  MPI_Type_free(&MPI_Point3d);
+
+  if (rank == 0) {
+    double min_z = res_list[0].z;
+    int k = 0;
+    for (int i = 1; i < size; i++) {
+      // printf("x: %lf, y: %lf, z: %lf \n", res_list[i].x, res_list[i].y, res_list[i].z);
+      if (res_list[i].z < min_z) {
+        min_z = res_list[i].z;
+        k = i;
+      }
+    }
+    res = res_list[k];
+  }
+
+  return res;
+}
+
+double calcM(const std::vector<Point2d> &elems, double r) {
+  double u = -1;
+  double M = 0;
+  int N = static_cast<int>(elems.size());
+  for (int i = 1; i < N; i++) {
+    double current_u =
+        std::abs(elems[i].y - elems[i - 1].y) / (elems[i].x - elems[i - 1].x);
+    if (current_u > u) {
+      u = current_u;
+    }
+  }
+  if (u > 0) {
+    M = u * r;
+  } else {
+    M = 1;
+  }
+  return M;
+}
+
+double calcM(const std::vector<Point3d> &elems, double r) {
+  double u = -1;
+  double M = 0;
+  int N = static_cast<int>(elems.size());
+  for (int i = 1; i < N; i++) {
+    double current_u =
+        std::abs(elems[i].z - elems[i - 1].z) / (elems[i].x - elems[i - 1].x);
+    if (current_u > u) {
+      u = current_u;
+    }
+  }
+  if (u > 0) {
+    M = u * r;
+  } else {
+    M = 1;
+  }
+  return M;
+}
+
+int calcNumMaxR(const std::vector<Point2d> &elems, double M) {
+  double max_R = 2 * (elems[1].x - elems[0].x) - 4 * elems[1].y / M;
+  int num_max_R = 1;
+  int N = static_cast<int>(elems.size());
+  for (int i = 2; i < N - 1; i++) {
+    double R = elems[i].x - elems[i - 1].x +
+               ((elems[i].y - elems[i - 1].y) * (elems[i].y - elems[i - 1].y)) /
+                   (M * M * elems[i].x - elems[i - 1].x) -
+               2 * (elems[i].y + elems[i - 1].y) / M;
+    if (R > max_R) {
+      max_R = R;
+      num_max_R = i;
+    }
+  }
+  double R = 2 * (elems[N - 1].x - elems[N - 2].x) - 4 * elems[N - 2].y / M;
+  if (R > max_R) {
+    max_R = R;
+    num_max_R = N - 1;
+  }
+  return num_max_R;
+}
+
+int calcNumMaxR(const std::vector<Point3d> &elems, double M) {
+  double max_R = 2 * (elems[1].x - elems[0].x) - 4 * elems[1].z / M;
+  int num_max_R = 1;
+  int N = static_cast<int>(elems.size());
+  for (int i = 2; i < N; i++) {
+    double R = elems[i].x - elems[i - 1].x +
+               ((elems[i].z - elems[i - 1].z) * (elems[i].z - elems[i - 1].z)) /
+                   (M * M * elems[i].x - elems[i - 1].x) -
+               2 * (elems[i].z + elems[i - 1].z) / M;
+    if (R > max_R) {
+      max_R = R;
+      num_max_R = i;
+    }
+  }
+  double R = 2 * (elems[N - 1].x - elems[N - 2].x) - 4 * elems[N - 2].z / M;
+  if (R > max_R) {
+    max_R = R;
+    num_max_R = N - 1;
+  }
+  return num_max_R;
+}
+
+bool sortPoint2d_x(const Point2d &left, const Point2d &right) {
+  return left.x < right.x;
+}
+bool sortPoint3d_x(const Point3d &left, const Point3d &right) {
+  return left.x < right.x;
+}
+\end{lstlisting}
+
+main.cpp
+\begin{lstlisting}
+// Copyright 2021 Vershinin Daniil
+#include <gtest/gtest.h>
+
+#include <vector>
+#include <gtest-mpi-listener.hpp>
+
+#include "./mulit_step_optimization_search_area.h"
+
+double F1(double x, double y) { return x * x + y * y; }
+double F2(double x, double y) {
+  return (1.5 - x + x * y) * (1.5 - x + x * y) +
+         (2.25 - x + x * y * y) * (2.25 - x + x * y * y) +
+         (2.625 - x + x * y * y * y) * (2.625 - x + x * y * y * y);
+}
+double F3(double x, double y) {
+  return (x + 2 * y - 7) * (x + 2 * y - 7) + (2 * x + y - 5) * (2 * x + y - 5);
+}
+
+double F4(double x, double y) { return 0.26 * (x * x + y * y) - 0.48 * x * y; }
+
+TEST(Sequential_Operations, Test_With_F1) {
+  Point3d res = getSequentialOperations(-1, 1, -1, 1, F1);
+  ASSERT_NEAR(res.x, 0, 0.001);
+  ASSERT_NEAR(res.y, 0, 0.001);
+}
+
+TEST(Sequential_Operations, Test_With_F2) {
+  Point3d res = getSequentialOperations(-4.5, 4.5, -4.5, 4.5, F2);
+  ASSERT_NEAR(res.x, 3, 0.01);
+  ASSERT_NEAR(res.y, 0.5, 0.01);
+}
+
+TEST(Sequential_Operations, Test_With_F3) {
+  Point3d res = getSequentialOperations(-10, 10, -10, 10, F3);
+  ASSERT_NEAR(res.x, 1, 0.001);
+  ASSERT_NEAR(res.y, 3, 0.001);
+}
+
+TEST(Sequential_Operations, Test_With_F4) {
+  Point3d res = getSequentialOperations(-10, 10, -10, 10, F4);
+  ASSERT_NEAR(res.x, 0, 0.0015);
+  ASSERT_NEAR(res.y, 0, 0.0015);
+}
+
+TEST(Parallel_Operations_MPI, Test_With_F1) {
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  Point3d res;
+  if (size > 1) {
+    res = getParallelOperations(-1, 1, -1, 1, F1);
+  } else {
+    res = getSequentialOperations(-1, 1, -1, 1, F1);
+  }
+
+  if (rank == 0) {
+    ASSERT_NEAR(res.x, 0, 0.001);
+    ASSERT_NEAR(res.y, 0, 0.001);
+  }
+}
+
+TEST(Parallel_Operations_MPI, Test_With_F2) {
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  Point3d res;
+  if (size > 1) {
+    res = getParallelOperations(-4.5, 4.5, -4.5, 4.5, F2);
+  } else {
+    res = getSequentialOperations(-4.5, 4.5, -4.5, 4.5, F2);
+  }
+
+  if (rank == 0) {
+    ASSERT_NEAR(res.x, 3, 0.01);
+    ASSERT_NEAR(res.y, 0.5, 0.01);
+  }
+}
+
+TEST(Parallel_Operations_MPI, Test_With_F3) {
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  Point3d res;
+  if (size > 1) {
+    res = getParallelOperations(-10, 10, -10, 10, F3);
+  } else {
+    res = getSequentialOperations(-10, 10, -10, 10, F3);
+  }
+
+  if (rank == 0) {
+    ASSERT_NEAR(res.x, 1, 0.001);
+    ASSERT_NEAR(res.y, 3, 0.001);
+  }
+}
+TEST(Parallel_Operations_MPI, Test_With_F4) {
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  Point3d res;
+  if (size > 1) {
+    res = getParallelOperations(-10, 10, -10, 10, F4);
+  } else {
+    res = getSequentialOperations(-10, 10, -10, 10, F4);
+  }
+
+  if (rank == 0) {
+    ASSERT_NEAR(res.x, 0, 0.0015);
+    ASSERT_NEAR(res.y, 0, 0.0015);
+  }
+}
+
+// Test time
+// TEST(Parallel_Operations_MPI, Test_With_F1) {
+//   int rank, size;
+//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//   MPI_Comm_size(MPI_COMM_WORLD, &size);
+//   double start = 0, end = 0.001;
+//   Point3d res;
+//   if (size > 1) {
+//     start = MPI_Wtime();
+//     res = getParallelOperations(-1, 1, -1, 1, F1);
+//     end = MPI_Wtime();
+//   }
+//
+//   if (rank == 0) {
+//     double t1 = end - start;
+//     start = MPI_Wtime();
+//     Point3d check_res = getSequentialOperations(-1, 1, -1, 1, F1);
+//     end = MPI_Wtime();
+//     double t2 = end - start;
+//
+//     if (size == 1) {
+//       res = check_res;
+//     }
+//     // printf("t2 / t1: %lf\n", t2 / t1);
+//     // printf("res x: %lf, y: %lf, z: %lf \n", res.x, res.y, res.z);
+//     // fflush(stdout);
+//
+//     ASSERT_NEAR(res.x, check_res.x, 0.001);
+//     ASSERT_NEAR(res.y, check_res.y, 0.001);
+//     ASSERT_NEAR(res.z, check_res.z, 0.001);
+//   }
+// }
+//
+// TEST(Parallel_Operations_MPI, Test_With_F2) {
+//   int rank, size;
+//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//   MPI_Comm_size(MPI_COMM_WORLD, &size);
+//   double start = 0, end = 0.001;
+//   Point3d res;
+//   if (size > 1) {
+//     start = MPI_Wtime();
+//     res = getParallelOperations(-4.5, 4.5, -4.5, 4.5, F2);
+//     end = MPI_Wtime();
+//   }
+//
+//   if (rank == 0) {
+//     double t1 = end - start;
+//     start = MPI_Wtime();
+//     Point3d check_res = getSequentialOperations(-4.5, 4.5, -4.5, 4.5, F2);
+//     end = MPI_Wtime();
+//     double t2 = end - start;
+//
+//     if (size == 1) {
+//       res = check_res;
+//     }
+//     // printf("t2 / t1: %lf\n", t2 / t1);
+//     // printf("res x: %lf, y: %lf, z: %lf \n", res.x, res.y, res.z);
+//     // fflush(stdout);
+//
+//     ASSERT_NEAR(res.x, check_res.x, 0.001);
+//     ASSERT_NEAR(res.y, check_res.y, 0.001);
+//     ASSERT_NEAR(res.z, check_res.z, 0.001);
+//   }
+// }
+//
+// TEST(Parallel_Operations_MPI, Test_With_F3) {
+//   int rank, size;
+//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//   MPI_Comm_size(MPI_COMM_WORLD, &size);
+//   double start = 0, end = 0.001;
+//   Point3d res;
+//   if (size > 1) {
+//     start = MPI_Wtime();
+//     res = getParallelOperations(-10, 10, -10, 10, F3);
+//     end = MPI_Wtime();
+//   }
+//
+//   if (rank == 0) {
+//     double t1 = end - start;
+//     start = MPI_Wtime();
+//     Point3d check_res = getSequentialOperations(-10, 10, -10, 10, F3);
+//     end = MPI_Wtime();
+//     double t2 = end - start;
+//
+//     if (size == 1) {
+//       res = check_res;
+//     }
+//     // printf("t2 / t1: %lf\n", t2 / t1);
+//     // printf("res x: %lf, y: %lf, z: %lf \n", res.x, res.y, res.z);
+//     // fflush(stdout);
+//
+//     ASSERT_NEAR(res.x, check_res.x, 0.001);
+//     ASSERT_NEAR(res.y, check_res.y, 0.001);
+//     ASSERT_NEAR(res.z, check_res.z, 0.001);
+//   }
+// }
+// TEST(Parallel_Operations_MPI, Test_With_F4) {
+//   int rank, size;
+//   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//   MPI_Comm_size(MPI_COMM_WORLD, &size);
+//   double start = 0, end = 0.001;
+//   Point3d res;
+//   if (size > 1) {
+//     start = MPI_Wtime();
+//     res = getParallelOperations(-10, 10, -10, 10, F4);
+//     end = MPI_Wtime();
+//   }
+//
+//   if (rank == 0) {
+//     double t1 = end - start;
+//     start = MPI_Wtime();
+//     Point3d check_res = getSequentialOperations(-10, 10, -10, 10, F4);
+//     end = MPI_Wtime();
+//     double t2 = end - start;
+//
+//     if (size == 1) {
+//       res = check_res;
+//     }
+//     // printf("t2 / t1: %lf\n", t2 / t1);
+//     // printf("res x: %lf, y: %lf, z: %lf \n", res.x, res.y, res.z);
+//     // fflush(stdout);
+//
+//     ASSERT_NEAR(res.x, check_res.x, 0.0015);
+//     ASSERT_NEAR(res.y, check_res.y, 0.0015);
+//     ASSERT_NEAR(res.z, check_res.z, 0.0015);
+//   }
+// }
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  MPI_Init(&argc, &argv);
+
+  ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+  ::testing::TestEventListeners& listeners =
+      ::testing::UnitTest::GetInstance()->listeners();
+
+  listeners.Release(listeners.default_result_printer());
+  listeners.Release(listeners.default_xml_generator());
+
+  listeners.Append(new GTestMPIListener::MPIMinimalistPrinter);
+  return RUN_ALL_TESTS();
+}
+\end{lstlisting}
+
+\end{document}
